@@ -1,0 +1,47 @@
+name: fluxctl
+summary: fluxctl talks to Flux and helps you deploy your code
+description: |
+  fluxctl talks to your Flux instance and exposes all its
+  functionality to an easy to use command line interface.
+confinement: classic
+adopt-info: fluxctl
+base: core18
+
+parts:
+  fluxctl:
+    source: .
+    override-pull: |
+      snapcraftctl pull
+      FLUX_TAG="$(curl -s 'https://api.github.com/repos/fluxcd/flux/releases/latest' | jq -r .tag_name)"
+      set +e
+      git describe --exact-match --tags $(git log -n1 --pretty='%h')
+      retVal=$?
+      set -e
+      if [ $retVal -eq 0 ]; then
+        snapcraftctl set-version "$FLUX_TAG"
+        snapcraftctl set-grade stable
+      else
+        GIT_REV="$(git rev-parse --short HEAD)"
+        snapcraftctl set-version "$FLUX_TAG+$GIT_REV"
+        snapcraftctl set-grade devel
+      fi
+    plugin: nil
+    override-build: |
+      export GOBIN=$SNAPCRAFT_PART_INSTALL/bin
+      go build -o $GOBIN/fluxctl ./cmd/fluxctl
+    build-environment:
+      - GO111MODULE: 'on'
+      - CGO_ENABLED: '0'
+    build-packages:
+      - gcc
+      - git
+      - jq
+    build-snaps:
+      - go/1.13/stable
+    stage:
+      - -bin/fluxd
+      - -bin/helm-operator
+
+apps:
+  fluxctl:
+    command: bin/fluxctl
